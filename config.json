@@ -1,0 +1,22 @@
+{
+
+  "Locations": {
+    "Location1":{
+    "ID": "Tuggeranong",
+    "Config": {
+      "AQI Standard": "AUS",
+      "Device UUIDs": {
+        "Device1": "740c82ab-e4bb-4cea-b018-4dc0c5db0747"
+      }
+      }},
+    "Location2":{
+    "ID": "SAmple",
+    "Config": {
+      "AQI Standard": "AUS",
+      "Device UUIDs": {
+        "Device1": "29fa3f23-2dfe-493a-b772-9e481622718d"
+      }
+      }
+    }}
+    
+  }

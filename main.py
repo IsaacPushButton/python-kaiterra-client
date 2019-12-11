@@ -29,9 +29,13 @@ except IOError:
     print("I/O error")
         
 #pprint.pprint(r[0]['rco2']['points'][0]['value'])
+r = client.get_latest_sensor_readings([
+        '/sensedges/740c82ab-e4bb-4cea-b018-4dc0c5db0747/history/',
+    ])
 
+pprint.pprint(r)
 
-
+"""
 while True:
     r = client.get_latest_sensor_readings([
         '/sensedges/740c82ab-e4bb-4cea-b018-4dc0c5db0747',
@@ -76,3 +80,4 @@ while True:
         
 #sb.set()
 #sb.boxplot()
+"""
