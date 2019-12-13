@@ -54,8 +54,18 @@ def connect_writer():
     return conn
 
 
-def get_last_reading(deviceID):
-    return last_reading
+def get_last_reading_date(dev_id, sql_con):
+    date = dt.strptime('2019-12-01T00:00:00Z', date_format)
+    with sql_con.cursor() as cursor:
+        execute_single_sql(cursor, create_select_last_reading_string(dev_id))
+        sql_con.commit()
+        result = cursor.fetchone()
+
+    if result is not None:
+        date = result[6]
+    print("Last reading for device {}: {}".format(dev_id, date), flush=True)
+
+    return date
 
 
 def load_config():
@@ -66,46 +76,99 @@ def load_config():
 
 # def write_chunk
 
+def create_select_last_reading_string(dev):
+    sql = "SELECT * FROM readings WHERE device = '{}' ORDER BY ts DESC;".format(dev)
+    return sql
 
-def create_insert_string(p):
-    sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`) " \
-          "VALUES ({}, {},{},{},{},{},'{}','{}','{}')" \
-        .format(p['km100.rpm10c'], p['km100.rpm25c'], p['km102.rhumid'], p['km102.rtemp'], p['km102.rtvoc (ppb)'],
-                p['rco2 (ppm)'], dt.strptime(p['ts'], date_format).isoformat(), p['Location'], p['Device'])
+def convert_table_data_to_list(p):
+    # dv = default value
+    dv = 0
+    data_list = [None] * 9
+    data_list[0] = p.get('km100.rpm10c', dv)
+    data_list[1] = p.get('km100.rpm25c', dv)
+    data_list[2] = p.get('km102.rhumid', dv)
+    data_list[3] = p.get('km102.rtemp', dv)
+    data_list[4] = p.get('km102.rtvoc (ppb)', dv)
+    data_list[5] = p.get('rco2 (ppm)', dv)
+    data_list[6] = dt.strptime(p['ts'], date_format)#.isoformat()
+    data_list[7] = p['Location']
+    data_list[8] = p['Device']
+    return data_list
+
+def create_sql_insert_string(p):
+    # dv = default value
+    dv = 0
+    try:
+        sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`) " \
+              "VALUES ({}, {},{},{},{},{},'{}','{}','{}')" \
+            .format(p.get('km100.rpm10c', dv),
+                    p.get('km100.rpm25c', dv),
+                    p.get('km102.rhumid', dv),
+                    p.get('km102.rtemp', dv),
+                    p.get('km102.rtvoc (ppb)', dv),
+                    p.get('rco2 (ppm)', dv),
+                    dt.strptime(p['ts'], date_format).isoformat(),
+                    p['Location'],
+                    p['Device'])
+    except BaseException as e:
+        print("Could not parse row to sql.")
+        print("Data: {}".format(p))
+        print("Error: {}".format(e))
+
     return sql
 
 
+def execute_bulk_sql(cursor, sql_string, data):
+    try:
+        cursor.executemany(sql_string, data)
+    except pymysql.ProgrammingError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.DataError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.IntegrityError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.NotSupportedError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.OperationalError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except BaseException as e:
+        print('Unknown error: {} '.format(str(e)))
+
+
+def execute_single_sql(cursor, sql_string):
+    try:
+        cursor.execute(sql_string)
+    except pymysql.ProgrammingError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.DataError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.IntegrityError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.NotSupportedError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except pymysql.OperationalError as e:
+        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+    except BaseException as e:
+        print('Unknown error: {} '.format(str(e)))
+
+
+
 def write_chunk_to_db(chunk, sqlconnection):
+    # write_single_rows(chunk, sqlconnection)
+    queries = []
+    i = 0
+    for row in chunk:
+        queries.append(convert_table_data_to_list(row))
+    start_time = dt.now()
     with sqlconnection.cursor() as cursor:
-        # Create a new record
-        # sql = "USE device"
-        # cursor.execute(sql)
-        i = 0
-        for row in chunk:
-            try:
-                print("Writing to database {}/{}. Timestamp: {}".format(i, len(chunk), row['ts']), flush=True)
-                sql = create_insert_string(row)
-                # print("Sending SQL: {}".format(sql))
-                cursor.execute(sql)
-                i += 1
-            except pymysql.ProgrammingError as e:
-                print('Got error {!r}, errno is {}'.format(e, e.args[0]))
-            except pymysql.DataError as e:
-                print('Got error {!r}, errno is {}'.format(e, e.args[0]))
-            except pymysql.IntegrityError as e:
-                print('Got error {!r}, errno is {}'.format(e, e.args[0]))
-            except pymysql.NotSupportedError as e:
-                print('Got error {!r}, errno is {}'.format(e, e.args[0]))
-            except pymysql.OperationalError as e:
-                print('Got error {!r}, errno is {}'.format(e, e.args[0]))
-            except BaseException as e:
-                print('Unknown error: {} '.format(str(e)))
+        sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`) " \
+              "VALUES (%s, %s,%s,%s,%s,%s,%s,%s,%s)"
+        execute_bulk_sql(cursor, sql, queries)
+    print("Wrote {} rows to database in {} seconds".format(len(queries),dt.now()-start_time))
     sqlconnection.commit()
-    # connection is not autocommit by default. So you must commit to save
-    # your changes.
 
 
-def get_device_data_chunk(dev, location, sqlconnection, pulldate, chunkend):
+def get_device_data_chunk(dev, location, pulldate, chunkend):
     response_index = 0
     chunk_data = []
     for responses in request_kaiterra_data(dev, start=pulldate.strftime(date_format),
@@ -125,41 +188,51 @@ def get_device_data_chunk(dev, location, sqlconnection, pulldate, chunkend):
     return chunk_data
 
 
-def get_location_data(location):
-    location_name = location['ID']
+def get_location_data(location, sql_con):
+    #  print("location raw: {}. type: {}".format(location,type(location)))
     location_devices = [location['Config']['Device UUIDs'][i] for i in location['Config']['Device UUIDs']]
 
-    startDate = '2019-12-10T00:00:00Z'
-    endDate = '2019-12-10T00:15:00Z'
-    # startDate = get_last_reading()
-    # endDate = dt.now()
-    # devs = ['740c82ab-e4bb-4cea-b018-4dc0c5db0747']
-    # devs = ['29fa3f23-2dfe-493a-b772-9e481622718d']
-    tdelta = dt.strptime(endDate, date_format) - dt.strptime(startDate, date_format)
-    chunksize = 3
-    chunks = int(math.ceil(tdelta.days / chunksize))
-    if chunks == 0: chunks = 1
-    print("Breaking request into {} chunks".format(chunks), flush=True)
-    data_chunks = []
-    for i in range(chunks):
-        print("Pulling chunk {}".format(str(i)), flush=True)
-        readings = []
-        pulldate = dt.strptime(startDate, date_format) + (timedelta(days=chunksize) * i)
-        chunkend = pulldate + timedelta(days=chunksize)
-        if chunkend > dt.strptime(endDate, date_format):
-            chunkend = dt.strptime(endDate, date_format)
-        for dev in location_devices:
-            print("Requesting data for device {}. Chunk {}/{}".format(dev, i, chunks), flush=True)
-            data_chunks.append(get_device_data_chunk(dev, location, sqlconnection, pulldate, chunkend))
+    for dev in location_devices:
+        # startDate = '2019-12-10T00:00:00Z'
+        # endDate = '2019-12-10T00:15:00Z'
+        startDate = get_last_reading_date(dev, sql_con).strftime(date_format)
+        endDate = dt.now().strftime(date_format)
+        # devs = ['740c82ab-e4bb-4cea-b018-4dc0c5db0747']
+        # devs = ['29fa3f23-2dfe-493a-b772-9e481622718d']
+        tdelta = dt.strptime(endDate, date_format) - dt.strptime(startDate, date_format)
+        chunksize = 3
+        chunks = int(math.ceil(tdelta.days / chunksize))
+        if chunks == 0: chunks = 1
+        print("Breaking request into {} chunks".format(chunks), flush=True)
+        data_chunks = []
+        for i in range(chunks):
+            print("Pulling chunk {}".format(str(i + 1)), flush=True)
+            readings = []
+            pulldate = dt.strptime(startDate, date_format) + (timedelta(days=chunksize) * i)
+            chunkend = pulldate + timedelta(days=chunksize)
+            if chunkend > dt.strptime(endDate, date_format):
+                chunkend = dt.strptime(endDate, date_format)
+            print("Requesting data for device {} from {} Chunk {}/{}".format(dev, pulldate, i + 1, chunks), flush=True)
+            dev_data = get_device_data_chunk(dev, location, pulldate, chunkend)
+            print("Got {} rows for device: {}".format(len(dev_data), dev), flush=True)
+            data_chunks.append(dev_data)
+
     return data_chunks
+
+
+def key(args):
+    pass
 
 
 def pull_history():
     config = load_config()
     sqlconnection = connect_writer()
-    for location in config['Locations']:
-        print("Getting data for location {}...".format(key), flush=True)
-        for data_chunk in get_location_data(config['Locations'][key]):
+    for location in list(config['Locations']):
+        loc = config['Locations'][location]
+        print("Getting data for location: {}...".format(loc['ID']), flush=True)
+        data = get_location_data(config['Locations'][location], sqlconnection)
+        print("Writing {} rows to db".format(len(data)), flush=True)
+        for data_chunk in data:
             write_chunk_to_db(data_chunk, sqlconnection)
 
 

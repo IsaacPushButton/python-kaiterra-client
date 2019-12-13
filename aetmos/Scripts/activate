@@ -46,7 +46,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="$(if [ "$OSTYPE" "==" "cygwin" ]; then cygpath -u 'D:\Aetmos\python-kaiterra-client\aetmos'; else echo '/D/Aetmos/python-kaiterra-client/aetmos'; fi;)"
+VIRTUAL_ENV="$(if [ "$OSTYPE" "==" "cygwin" ]; then cygpath -u 'D:\Aetmos\kaiterraclient\aetmos'; else echo '/D/Aetmos/kaiterraclient/aetmos'; fi;)"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

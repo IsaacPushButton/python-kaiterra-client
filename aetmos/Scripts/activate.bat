@@ -1,6 +1,6 @@
 @echo off
 
-set "VIRTUAL_ENV=D:\Aetmos\python-kaiterra-client\aetmos"
+set "VIRTUAL_ENV=D:\Aetmos\kaiterraclient\aetmos"
 
 if defined _OLD_VIRTUAL_PROMPT (
     set "PROMPT=%_OLD_VIRTUAL_PROMPT%"

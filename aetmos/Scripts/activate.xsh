@@ -28,7 +28,7 @@ def _deactivate(args):
 _deactivate(["nondestructive"])
 aliases["deactivate"] = _deactivate
 
-$VIRTUAL_ENV = r"D:\Aetmos\python-kaiterra-client\aetmos"
+$VIRTUAL_ENV = r"D:\Aetmos\kaiterraclient\aetmos"
 
 $_OLD_VIRTUAL_PATH = $PATH
 $PATH = $PATH[:]
