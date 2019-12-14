@@ -4,7 +4,7 @@ import time
 import datetime
 import logging
 
-logging.basicConfig(filename='/opt/python/log/my.log', format='%(asctime)s %(message)s', level=logging.DEBUG)
+logging.basicConfig(filename='./collector.log', format='%(asctime)s %(message)s', level=logging.DEBUG)
 
 pull_interval = 2
 
