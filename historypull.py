@@ -8,7 +8,7 @@ import pymysql
 import math
 import pytz
 import logging
-
+import time
 # def pull_history():
 csv_columns = ['km100.rpm10c', 'km100.rpm25c', 'km102.rhumid', 'km102.rtemp', 'km102.rtvoc (ppb)', 'rco2 (ppm)', 'ts',
                'Location', 'Device']
@@ -18,23 +18,24 @@ date_format = '%Y-%m-%dT%H:%M:%SZ'
 
 def request_kaiterra_data(*devs, start=None, finish=None):
     key = 'MGIwMTQ5MmIzY2IzNDkwYWI1YjViZmUwMGE3MThhNjM3ZTA3'
-
-    # url = 'https://api.kaiterra.cn/v1/sensedges/{}'.format(dev)
-    r = requests.post(
-        'https://api.kaiterra.cn/v1/batch?include_headers=false',
-        params={'key': key},
-        headers={'Content-Type': 'application/json', 'Accept-Encoding': 'gzip'},
-        data=json.dumps(
-            [{'method': 'GET',
-              'relative_url': 'sensedges/{}/history?series=raw&begin={}&end={}'.format(dev, start, finish)} for dev in
-             devs]
-        )
-    )
     try:
+        # url = 'https://api.kaiterra.cn/v1/sensedges/{}'.format(dev)
+        r = requests.post(
+            'https://api.kaiterra.cn/v1/batch?include_headers=false',
+            params={'key': key},
+            headers={'Content-Type': 'application/json', 'Accept-Encoding': 'gzip'},
+            data=json.dumps(
+                [{'method': 'GET',
+                  'relative_url': 'sensedges/{}/history?series=raw&begin={}&end={}'.format(dev, start, finish)} for dev
+                 in
+                 devs]
+            )
+        )
+
         for response in r.json():
             yield json.loads(response['body'])
     except BaseException as e:
-        logging.error("JSON Decode failed. Content: {}, {}".format(e, e.args))
+        logging.error("Kaiterra request failed: {}, {}".format(e, e.args))
 
 
 def connect_writer():
@@ -78,7 +79,7 @@ def create_select_last_reading_string(dev):
 def convert_table_data_to_list(p):
     # dv = default value
     dv = 0
-    data_list = [None] * 9
+    data_list = [None] * 10
     data_list[0] = p.get('km100.rpm10c', dv)
     data_list[1] = p.get('km100.rpm25c', dv)
     data_list[2] = p.get('km102.rhumid', dv)
@@ -88,6 +89,7 @@ def convert_table_data_to_list(p):
     data_list[6] = dt.strptime(p['ts'], date_format)
     data_list[7] = p['Location']
     data_list[8] = p['Device']
+    data_list[9] = "{}-{}".format(data_list[8], p['ts'])
     return data_list
 
 
@@ -130,16 +132,13 @@ def write_chunk_to_db(chunk, sqlconnection):
     i = 0
     for row in chunk:
         queries.append(convert_table_data_to_list(row))
-    if len(queries):
         start_time = dt.now()
         with sqlconnection.cursor() as cursor:
-            sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`) " \
-                  "VALUES (%s, %s,%s,%s,%s,%s,%s,%s,%s)"
+            sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`, `idkey`) " \
+                  "VALUES (%s, %s,%s,%s,%s,%s,%s,%s,%s,%s)"
             execute_bulk_sql(cursor, sql, queries)
         logging.info("Wrote {} rows to database in {} seconds".format(len(queries), dt.now() - start_time))
         sqlconnection.commit()
-    else:
-        logging.info("No data in chunk")
 
 
 
@@ -161,13 +160,17 @@ def get_device_data_chunk(dev, location, pulldate, chunkend):
                     response_index += 1
     return chunk_data
 
-
-def get_location_data(location, sql_con):
+# hours=0: pull since last entry
+def get_location_data(location, sql_con, hours=0):
     location_devices = [location['Config']['Device UUIDs'][i] for i in location['Config']['Device UUIDs']]
     for dev in location_devices:
         # startDate = '2019-12-10T00:00:00Z'
         # endDate = '2019-12-10T00:15:00Z'
-        startDate = get_last_reading_date(dev, sql_con).strftime(date_format)
+        if hours == 0:
+            startDate = get_last_reading_date(dev, sql_con).strftime(date_format)
+        else:
+            startDate = dt.now() - timedelta(hours=hours)
+
         endDate = dt.now().strftime(date_format)
         tdelta = dt.strptime(endDate, date_format) - dt.strptime(startDate, date_format)
         chunksize = 3
@@ -185,6 +188,7 @@ def get_location_data(location, sql_con):
             dev_data = get_device_data_chunk(dev, location, pulldate, chunkend)
             logging.info("Got {} rows for device: {}".format(len(dev_data), dev))
             data_chunks.append(dev_data)
+            time.sleep(1)
     return data_chunks
 
 
@@ -192,15 +196,16 @@ def key(args):
     pass
 
 
-def pull_history():
+def pull_history(hours=0):
     config = load_config()
     sql_con = connect_writer()
     for location in list(config['Locations']):
         loc = config['Locations'][location]
         logging.info("Getting data for location: {}...".format(loc['ID']))
-        data = get_location_data(config['Locations'][location], sql_con)
-        logging.info("Writing {} chunks to database for location {}".format(len(data), loc['ID']))
-        for data_chunk in data:
-            write_chunk_to_db(data_chunk, sql_con)
-
-
+        data = get_location_data(config['Locations'][location], sql_con,hours)
+        if len(data) > 0:
+            logging.info("Got {} chunks from kaiterra for location {}".format(len(data), loc['ID']))
+            for data_chunk in data:
+                write_chunk_to_db(data_chunk, sql_con)
+        else:
+            logging.info("No data returned for location {}".format(loc['ID']))
