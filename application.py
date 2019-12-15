@@ -31,9 +31,13 @@ def recheck_period(hours):
     logging.info("----------------------------------------------------------------")
 
 
+def recheck24():
+    recheck_period(24)
+
+
 historypull.pull_history(24)
 schedule.every(pull_interval).minutes.do(pull_recent_history)
-schedule.every(recheck_interval).minutes.do(recheck_period)
+schedule.every(recheck_interval).minutes.do(recheck24)
 while True:
     schedule.run_pending()
     time.sleep(1)
