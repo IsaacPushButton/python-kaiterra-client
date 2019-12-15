@@ -127,65 +127,68 @@ def execute_single_sql(cursor, sql_string):
         logging.critical('Unknown Error: {!r}, errno is {}'.format(e, e.args[0]))
 
 
-def write_chunk_to_db(chunk, sqlconnection):
+def write_chunk_to_db(chunk, sql_conn):
     queries = []
     i = 0
     for row in chunk:
         queries.append(convert_table_data_to_list(row))
         start_time = dt.now()
-        with sqlconnection.cursor() as cursor:
+        with sql_conn.cursor() as cursor:
             sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`, `idkey`) " \
                   "VALUES (%s, %s,%s,%s,%s,%s,%s,%s,%s,%s)"
             execute_bulk_sql(cursor, sql, queries)
         logging.info("Wrote {} rows to database in {} seconds".format(len(queries), dt.now() - start_time))
-        sqlconnection.commit()
+        sql_conn.commit()
 
 
-
-def get_device_data_chunk(dev, location, pulldate, chunkend):
+def get_device_data_chunk(dev, location, pull_date, chunk_end):
     response_index = 0
     chunk_data = []
-    for responses in request_kaiterra_data(dev, start=pulldate.strftime(date_format),
-                                           finish=chunkend.isoformat().split('.')[0] + 'Z'):
+    for responses in request_kaiterra_data(dev, start=pull_date.strftime(date_format),
+                                           finish=chunk_end.isoformat().split('.')[0] + 'Z'):
         response_id = None
         for k in responses:
             if k == 'id':
                 response_id = responses[k]
             if k == 'data':
                 for p in responses[k]:
-                    datachunk = p
-                    datachunk['Device'] = response_id
-                    datachunk['Location'] = location['ID']
+                    data_chunk = p
+                    data_chunk['Device'] = response_id
+                    data_chunk['Location'] = location['ID']
                     chunk_data.append(p)
                     response_index += 1
     return chunk_data
 
 # hours=0: pull since last entry
+
+
 def get_location_data(location, sql_con, hours=0):
     location_devices = [location['Config']['Device UUIDs'][i] for i in location['Config']['Device UUIDs']]
     for dev in location_devices:
-        # startDate = '2019-12-10T00:00:00Z'
-        # endDate = '2019-12-10T00:15:00Z'
+        # start_date = '2019-12-10T00:00:00Z'
+        # end_date = '2019-12-10T00:15:00Z'
         if hours == 0:
-            startDate = get_last_reading_date(dev, sql_con).strftime(date_format)
+            start_date = get_last_reading_date(dev, sql_con).strftime(date_format)
         else:
-            startDate = dt.now() - timedelta(hours=hours)
+            start_date = dt.now() - timedelta(hours=hours)
+            start_date = start_date.strftime(date_format)
 
-        endDate = dt.now().strftime(date_format)
-        tdelta = dt.strptime(endDate, date_format) - dt.strptime(startDate, date_format)
-        chunksize = 3
-        chunks = int(math.ceil(tdelta.days / chunksize))
-        if chunks == 0: chunks = 1
+        end_date = dt.now().strftime(date_format)
+        delta = dt.strptime(end_date, date_format) - dt.strptime(start_date, date_format)
+        chunk_size = 3
+        chunks = int(math.ceil(delta.days / chunk_size))
+        if chunks == 0:
+            chunks = 1
         data_chunks = []
         for i in range(chunks):
             print("Pulling chunk {}".format(str(i + 1)), flush=True)
             readings = []
-            pulldate = dt.strptime(startDate, date_format) + (timedelta(days=chunksize) * i)
-            chunkend = pulldate + timedelta(days=chunksize)
-            if chunkend > dt.strptime(endDate, date_format):
-                chunkend = dt.strptime(endDate, date_format)
-            logging.info("Requesting data for device {} from {} Chunk {}/{}".format(dev, pulldate, i + 1, chunks))
-            dev_data = get_device_data_chunk(dev, location, pulldate, chunkend)
+            pull_date = dt.strptime(start_date, date_format) + (timedelta(days=chunk_size) * i)
+            chun_kend = pull_date + timedelta(days=chunk_size)
+            if chun_kend > dt.strptime(end_date, date_format):
+                chun_kend = dt.strptime(end_date, date_format)
+            logging.info("Requesting data for device {} from {} Chunk {}/{}".format(dev, pull_date, i + 1, chunks))
+            dev_data = get_device_data_chunk(dev, location, pull_date, chun_kend)
             logging.info("Got {} rows for device: {}".format(len(dev_data), dev))
             data_chunks.append(dev_data)
             time.sleep(1)
