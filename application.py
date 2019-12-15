@@ -35,7 +35,7 @@ def recheck24():
     recheck_period(24)
 
 
-historypull.pull_history(24)
+#historypull.pull_history(24)
 schedule.every(pull_interval).minutes.do(pull_recent_history)
 schedule.every(recheck_interval).minutes.do(recheck24)
 while True:

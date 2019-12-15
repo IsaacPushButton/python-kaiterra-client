@@ -51,7 +51,7 @@ def connect_writer():
 
 
 def get_last_reading_date(dev_id, sql_con):
-    date = dt.strptime('2019-12-01T00:00:00Z', date_format)
+    date = dt.strptime('2019-08-01T00:00:00Z', date_format)
     with sql_con.cursor() as cursor:
         execute_single_sql(cursor, create_select_last_reading_string(dev_id))
         sql_con.commit()
