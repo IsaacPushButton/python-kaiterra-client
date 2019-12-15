@@ -101,7 +101,11 @@ def execute_bulk_sql(cursor, sql_string, data):
     except pymysql.DataError as e:
         logging.critical('SQL Error: {!r}, errno is {}'.format(e, e.args[0]))
     except pymysql.IntegrityError as e:
-        logging.critical('SQL Error: {!r}, errno is {}'.format(e, e.args[0]))
+        if str(e.args[0]) == '1062':
+         #   print("Suppressed duplicate error")
+            pass
+        else:
+            logging.critical('SQL Error: {!r}, errno is {}'.format(e, e.args[0]))
     except pymysql.NotSupportedError as e:
         logging.critical('SQL Error: {!r}, errno is {}'.format(e, e.args[0]))
     except pymysql.OperationalError as e:
@@ -132,13 +136,13 @@ def write_chunk_to_db(chunk, sql_conn):
     i = 0
     for row in chunk:
         queries.append(convert_table_data_to_list(row))
-        start_time = dt.now()
-        with sql_conn.cursor() as cursor:
-            sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`, `idkey`) " \
-                  "VALUES (%s, %s,%s,%s,%s,%s,%s,%s,%s,%s)"
-            execute_bulk_sql(cursor, sql, queries)
+    start_time = dt.now()
+    with sql_conn.cursor() as cursor:
+        sql = "INSERT INTO `readings` (`pm10c`, `pm25c`, `humid`, `temp`, `tvoc`, `co2`, `ts`, `location`, `device`, `idkey`) " \
+              "VALUES (%s, %s,%s,%s,%s,%s,%s,%s,%s,%s)"
+        execute_bulk_sql(cursor, sql, queries)
         logging.info("Wrote {} rows to database in {} seconds".format(len(queries), dt.now() - start_time))
-        sql_conn.commit()
+    sql_conn.commit()
 
 
 def get_device_data_chunk(dev, location, pull_date, chunk_end):
@@ -189,7 +193,7 @@ def get_location_data(location, sql_con, hours=0):
                 chun_kend = dt.strptime(end_date, date_format)
             logging.info("Requesting data for device {} from {} Chunk {}/{}".format(dev, pull_date, i + 1, chunks))
             dev_data = get_device_data_chunk(dev, location, pull_date, chun_kend)
-            logging.info("Got {} rows for device: {}".format(len(dev_data), dev))
+            logging.info("{} rows in chunk for device: {}".format(len(dev_data), dev))
             data_chunks.append(dev_data)
             time.sleep(1)
     return data_chunks
